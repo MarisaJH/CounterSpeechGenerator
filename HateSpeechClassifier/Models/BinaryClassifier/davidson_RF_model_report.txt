@@ -1,0 +1,10 @@
+              precision    recall  f1-score   support
+
+           0       0.86      0.69      0.77       835
+           1       0.94      0.98      0.96      4122
+
+    accuracy                           0.93      4957
+   macro avg       0.90      0.83      0.86      4957
+weighted avg       0.93      0.93      0.93      4957
+Random Forest Train accuracy 99.950%
+Random Forest Test accuracy 92.919%
