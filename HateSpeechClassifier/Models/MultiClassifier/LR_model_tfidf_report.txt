@@ -1,0 +1,18 @@
+              precision    recall  f1-score   support
+
+           0       1.00      0.76      0.87        55
+           1       0.98      0.92      0.95       128
+           2       0.97      0.82      0.89       112
+           3       0.94      0.97      0.95       186
+           4       0.95      0.96      0.95       273
+           5       0.98      0.77      0.87        79
+           6       0.97      0.95      0.96       117
+           7       1.00      0.41      0.58        59
+           8       0.91      1.00      0.95       825
+
+    accuracy                           0.94      1834
+   macro avg       0.97      0.84      0.89      1834
+weighted avg       0.94      0.94      0.93      1834
+Logistic Regression Train accuracy 96.181%
+Logistic Regression Test accuracy 93.511%
+
