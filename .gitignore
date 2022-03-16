@@ -7,5 +7,6 @@ HateSpeechClassifier/Data/glove*
 HateSpeechClassifier/Data/GoogleNews-vectors-negative300.bin
 HateSpeechClassifier/Data/GoogleNews-vectors-negative300.bin.gz
 HateSpeechClassifier/Figures
+HateSpeechClassifier/BinaryClassifier
 Unofficial_Classification.ipynb
 .ipynb_checkpoints
