@@ -46,8 +46,8 @@ def utils_preprocess_text(text: str, flg_stemm=False, flg_lemm=False, lst_stopwo
     return text
 
 def classify(texts: List[str], 
-            vectorizer_path='Models/Embeddings/tfidf_vectorizer', 
-            model_path='Models/MultiClassifier/LR_model_tfidf'
+            vectorizer_path='Models/Embeddings/tfidf_vectorizer_nostop', 
+            model_path='Models/MultiClassifier/LR_tfidf_matrix_nostop'
             ):
 
     with open(vectorizer_path, 'rb') as f:
