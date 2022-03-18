@@ -3,6 +3,7 @@ HateSpeechClassifier/Models/MultiClassifier/OLD
 HateSpeechClassifier/Models/MultiClassifier/*.txt
 HateSpeechClassifier/Models/Embeddings/OLD
 HateSpeechClassifier/Models/Embeddings/bert*
+HateSpeechClassifier/Models/Embeddings/d2v_100epochs_300dims_nostop
 HateSpeechClassifier/Data/glove*
 HateSpeechClassifier/Data/GoogleNews-vectors-negative300.bin
 HateSpeechClassifier/Data/GoogleNews-vectors-negative300.bin.gz

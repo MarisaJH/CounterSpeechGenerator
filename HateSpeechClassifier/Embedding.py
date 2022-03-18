@@ -34,20 +34,20 @@ class Embedding:
         if load_filename != '':
             self.embedding.__init_from_file__(load_filename)
 
-    def vectorize(self, texts: List[str], unseen=False):
+    def vectorize(self, texts: List[str], unseen=False, **kwargs):
         '''
         Vectorize each text in texts; train models when appropriate (doc2vec).
         
         if unseen is true, infer vectors based on trained models when appropriate
         '''
-        return self.embedding.vectorize(texts, unseen=unseen)
+        return self.embedding.vectorize(texts, unseen=unseen, **kwargs)
     
-    def save(self):
+    def save(self, **kwargs):
         '''
         After running vectorize(), save the sentence vectors/embeddings, 
         or models when appropriate, for the given texts.
         '''
-        return self.embedding.save()
+        return self.embedding.save(**kwargs)
     
     def get_filename(self):
         '''
@@ -77,7 +77,7 @@ class TFIDF:
             self.tfidf_vectorizer = pickle.load(f)
 
 
-    def vectorize(self, texts: List[str], unseen=False) -> csr_matrix:
+    def vectorize(self, texts: List[str], unseen=False, **kwargs) -> csr_matrix:
         if self.tfidf_vectorizer is None:
             self.tfidf_vectorizer = TfidfVectorizer(ngram_range=(1, 2),
                                        max_df = 0.75, min_df=5, 
@@ -95,20 +95,33 @@ class TFIDF:
         with_stop = 'withstop' if self.with_stopwords else 'nostop'
         return 'tfidf_matrix_' + with_stop
 
-    def save(self):
+    def save(self, train_test_split=False, save_test=False):
         '''
         Save the tfidf vectorizer (so vectors can be inferred for unseen texts),
         and the tfidf matrix (the vectors for the given texts).
+
+        params:
+            train_test_split: if true, need to append 'train' or 'test' to the filename
+            save_test: if true, append 'test' to the tfidf matrix (don't need to save vectorizer in this case)
         '''
         
         with_stop = 'withstop' if self.with_stopwords else 'nostop'
         
         vectorizer_path = EMBEDDINGS_SAVE_PATH + 'tfidf_vectorizer_' + with_stop
-        if self.tfidf_vectorizer is not None:
+        if train_test_split:
+            vectorizer_path += '_train'
+        
+        if self.tfidf_vectorizer is not None and not save_test:
             with open(vectorizer_path, 'wb+') as f:
                 pickle.dump(self.tfidf_vectorizer, f)
         
         matrix_path = EMBEDDINGS_SAVE_PATH + 'tfidf_matrix_' + with_stop
+        if train_test_split:
+            if save_test:
+                matrix_path += '_test'
+            else:
+                matrix_path += '_train'
+        
         if self.tfidf_matrix is not None:
             with open(matrix_path, 'wb+') as f:
                 pickle.dump(self.tfidf_matrix, f)
@@ -142,7 +155,7 @@ class Doc2Vec:
             self.model = pickle.load(f)
         
         
-    def vectorize(self, texts: List[str], unseen=False) -> List[np.ndarray]:
+    def vectorize(self, texts: List[str], unseen=False, **kwargs) -> List[np.ndarray]:
         # infer vectors of unseen data based on trained model
         if unseen:
             embeddings = [0]*len(texts)
@@ -176,7 +189,7 @@ class Doc2Vec:
         with_stop = 'withstop' if self.with_stopwords else 'nostop'
         return 'd2v_' + f'{self.epochs}epochs_{self.dimensions}dim_{with_stop}'
 
-    def save(self):
+    def save(self, **kwargs):
         '''
         Save the trained doc2vec model.
         '''
@@ -233,11 +246,11 @@ class Word2Vec:
 
         # create sentence vectors by specified weighting scheme
         if self.weighting == 'tfidf':
-            return self.__tfidf_vectorize__()
+            return self.__tfidf_vectorize__(**kwargs)
         else: # equal weighting/simple avg of each word in sentence
             return self.__equal_vectorize__(texts)
         
-    def __tfidf_vectorize__(self) -> List[np.ndarray]:
+    def __tfidf_vectorize__(self, load_train=False, load_test=False, **kwargs) -> List[np.ndarray]:
         '''
         Assumes a tfidf matrix has already been saved (made with the same texts as passed to vectorize()),
         and is ready to load.
@@ -245,10 +258,21 @@ class Word2Vec:
         with_stop = 'withstop' if self.with_stopwords else 'nostop'
 
         # load tfidf vectorizer and matrix
-        with open(EMBEDDINGS_SAVE_PATH + f'tfidf_vectorizer_{with_stop}', 'rb') as f:
+        vectorizer_path = EMBEDDINGS_SAVE_PATH + f'tfidf_vectorizer_{with_stop}'
+        if load_train or load_test:
+            vectorizer_path += '_train'
+        
+        with open(vectorizer_path, 'rb') as f:
             tfidf_vectorizer = pickle.load(f)
-        with open(EMBEDDINGS_SAVE_PATH + f'tfidf_matrix_{with_stop}', 'rb') as f:
-            tfidf_matrix = pickle.load(f)        
+        
+        matrix_path = EMBEDDINGS_SAVE_PATH + f'tfidf_matrix_{with_stop}'
+        if load_train:
+            matrix_path += '_train'
+        elif load_test:
+            matrix_path += '_test'
+        
+        with open(matrix_path, 'rb') as f:
+            tfidf_matrix = pickle.load(f)       
 
         # get w2v embeddings of the tfidf terms
         terms = tfidf_vectorizer.get_feature_names()
@@ -290,7 +314,7 @@ class Word2Vec:
         with_stop = 'withstop' if self.with_stopwords else 'nostop'
         return f'w2v_{self.weighting}weight_{with_stop}'
 
-    def save(self):
+    def save(self, **kwargs):
         '''
         Save the sentence embeddings for the given texts
         '''
@@ -364,11 +388,11 @@ class GloVe:
 
         # get sentence vecs based on the specified weighting scheme
         if self.weighting == 'tfidf':
-            return self.__tfidf_vectorize__()
+            return self.__tfidf_vectorize__(**kwargs)
         else: # equal weighting/avg each word vector
             return self.__equal_vectorize__(texts)
 
-    def __tfidf_vectorize__(self) -> List[np.ndarray]:
+    def __tfidf_vectorize__(self, load_train=False, load_test=False, **kwargs) -> List[np.ndarray]:
         '''
         Assumes a tfidf matrix has already been saved (made with the same texts as passed to vectorize()),
         and is ready to load.       
@@ -376,11 +400,22 @@ class GloVe:
         with_stop = 'withstop' if self.with_stopwords else 'nostop'
 
         # load tfidf vectorizer and matrix
-        with open(EMBEDDINGS_SAVE_PATH + f'tfidf_vectorizer_{with_stop}', 'rb') as f:
+        vectorizer_path = EMBEDDINGS_SAVE_PATH + f'tfidf_vectorizer_{with_stop}'
+        if load_train or load_test:
+            vectorizer_path += '_train'
+        
+        with open(vectorizer_path, 'rb') as f:
             tfidf_vectorizer = pickle.load(f)
-        with open(EMBEDDINGS_SAVE_PATH + f'tfidf_matrix_{with_stop}', 'rb') as f:
+        
+        matrix_path = EMBEDDINGS_SAVE_PATH + f'tfidf_matrix_{with_stop}'
+        if load_train:
+            matrix_path += '_train'
+        elif load_test:
+            matrix_path += '_test'
+        
+        with open(matrix_path, 'rb') as f:
             tfidf_matrix = pickle.load(f)   
-
+ 
         # get the glove embedding for each term in the tfidf matrix
         terms = tfidf_vectorizer.get_feature_names()
         term_glove_embeddings = np.zeros((len(terms), self.dimensions)) 
@@ -407,7 +442,7 @@ class GloVe:
         with_stop = 'withstop' if self.with_stopwords else 'nostop'
         return f'glove_{self.dimensions}dim_{self.weighting}weight_{with_stop}'
 
-    def save(self):
+    def save(self, **kwargs):
         '''
         Save the sentence embeddings for the given texts 
         '''
@@ -464,7 +499,7 @@ class BERT:
         with_stop = 'withstop' if self.with_stopwords else 'nostop'
         return f'bert_{with_stop}'
 
-    def save(self):
+    def save(self, **kwargs):
         '''
         Save bert sentence embeddings for given texts
         '''
@@ -531,9 +566,9 @@ if __name__ == '__main__':
         tweets.append(tweet)
         labels.append(label)
 
-    e = Embedding('tfidf', with_stopwords=True, weighting='tfidf', epochs=50, dimensions=50)
+    e = Embedding('word2vec', with_stopwords=True, weighting='tfidf', epochs=50, dimensions=50)
     
-    vectors = e.vectorize(tweets)
+    vectors = e.vectorize(tweets, load_test=True)
     print(vectors[0])
 
-    e.save()
+    #e.save()

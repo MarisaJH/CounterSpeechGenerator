@@ -1,10 +1,11 @@
-import json, random, pickle, re, os
+import json, pickle, os
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from sklearn import model_selection
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
@@ -14,7 +15,7 @@ from sklearn.metrics import classification_report
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import plot_roc_curve
 
-from typing import List
+from typing import List, Dict, Tuple
 from collections import defaultdict
 
 from nltk.tokenize import word_tokenize
@@ -25,67 +26,106 @@ from nltk.corpus import stopwords
 from Embedding import Embedding, utils_preprocess_text
 from Model import Model, MODELS_PATH
 
-
-'''
-possible embeddings:
-    embeddings=[tfidf, word2vec, doc2vec, glove, bert] 
-    with_stopwords (bool)
-    weighting_type=equal (or tfidf)
-    dimensions=300 (or 50, 100)
-    
-possible models:
-    models=[LR, RF, CNN, LSTM]
-
-run tests, generate reports:
-
-on training data (k-fold):
-in: X (text), y (labels)
-    split into train/test
-save to files: confusion, roc curve, reports, summary results
+SEED = 100
+TARGET_TYPES = ['Disabled', 'Jews', 'LGBT+', 'Migrants', 'Muslims', 'POC', 'Women', 'Other/Mixed', 'None']
 
 
-on real-world
-in: X (text), y (labels)
-    no splitting into train/test; compare y pred with given y
-save to files: confusion, roc curve, reports, summary results
-
-
-train and save:
-    no train/test split, train on whole dataset, save to file
-
-classify:
-for use by the bots
-in: [text], path
-out: [labels], [probs]
-'''
-
-def run_tests(X: List[str], y: List[int], 
-              use_k_fold=True,
-              save_confusion=True,
-              save_ROC=True, 
-              save_reports=True,
-              save_summary=True):
-    pass
+def run_tests_kfold(texts: List[str], labels: List[int],
+                    embedding_types=['tfidf', 'word2vec', 'doc2vec', 'glove', 'bert'],
+                    model_types=['LR', 'RF'],
+                    with_stopwords=False,
+                    weighting_type='equal',  
+                    dimensions=300,
+                    scoring = ['accuracy', 'balanced_accuracy', 'precision_weighted', 'recall_weighted', 'f1_weighted', 'roc_auc_ovr'],
+                    debug=True
+                    ) -> Tuple[pd.DataFrame, Dict[str, np.ndarray]]:
     '''
-    Generate test results for multiple combinations of embeddings and models.
+    Based on: https://towardsdatascience.com/quickly-test-multiple-models-a98477476f0
+    
+    Run kfold cross validation on multiple embedding/model combos. 
 
     params:
-    X: list of strings (posts)
-    y: class labels
-    use_k_fold: set to True when testing performance on training data;
-        set to False when testing performance on real-world Tumblr/Reddit posts;
-        False assumes there are already-trained models which it can load
+        texts: list of strings (posts), already stripped of punctuation/symbols
+        labels: class labels
+        embedding_types: which embeddings to use; can pass in less than the default
+        model_types: which models to use; can pass in less than default
+        with_stopwords: whether to remove stopwords from input
+        weighting_type: how to weight word vectors for word2vec and glove. Other option is 'tfidf'
+        dimensions: for glove and doc2vec. Other options are 50, 100, 200 for glove, any for doc2vec
+        scoring: which metrics to evaluate the model on. Make sure these are suited for multiclassifcation
+        debug: if True, print current embedding and model that is training    
 
-    '''
+    returns:
+        pandas dataframe summarizing results, for each model and each k in the kfold
+        dictionary {model name: confusion matrix}
+    '''   
+    # remove stopwords if necessary
+    if not with_stopwords:
+        stop_words = stopwords.words('english')
+        texts = [t for t in texts if not t in stop_words]
 
+    X_train_text, X_test_text, y_train, y_test = train_test_split(texts, labels, random_state=SEED, test_size=0.2)
+
+    dfs = [] # save results for each scoring metric for each k in the kfold
+    confusions = {} # save one confusion matrix for each embedding/model combo
+    for embedding_type in embedding_types:
+        if debug:
+            print('----------------------------------------')
+            print(embedding_type)
+
+        embedding = Embedding(embedding_type, 
+                              with_stopwords=with_stopwords, 
+                              weighting=weighting_type,
+                              dimensions=dimensions)
+        
+        # vectorize train and test set
+        X_train = embedding.vectorize(X_train_text, load_train=True)
+
+        # might need to save tfidf vectorizer and matrix for later use
+        if embedding_type == 'tfidf' and weighting_type == 'tfidf':
+            embedding.save(train_test_split=True)
+
+        X_test = embedding.vectorize(X_test_text, unseen=True, load_test=True)
+        
+        if embedding_type == 'tfidf' and weighting_type == 'tfidf':
+            embedding.save(train_test_split=True, save_test=True)
+
+        for model_type in model_types:
+            if debug:
+                print('  ' + model_type)
+            
+            # run kfold
+            model = Model(model_type, max_iter=2000)
+            
+            kfold = model_selection.KFold(n_splits=5, shuffle=True, random_state=SEED)
+            cv_results = model_selection.cross_validate(model.model, X_train, y_train, cv=kfold, scoring=scoring)
+            clf = model.model.fit(X_train, y_train)
+            y_pred = clf.predict(X_test)
+
+            # add results to dataframe
+            model_name = model_type + '_' + embedding.get_filename()
+
+            this_df = pd.DataFrame(cv_results)
+            this_df['model'] = model_name
+            dfs.append(this_df)
+            
+            # save confusion
+            confusion = confusion_matrix(y_test, y_pred)
+            confusions[model_name] = confusion
+
+            if debug:
+                print(classification_report(y_test, y_pred, target_names=TARGET_TYPES))  
+
+    final_df = pd.concat(dfs, ignore_index=True)
+    return final_df, confusions
 
 
 def train_and_save(texts: List[str], labels: List[int],
                    embedding_types=['tfidf', 'word2vec', 'doc2vec', 'glove', 'bert'],
+                   model_types=['LR', 'RF'],
                    with_stopwords=False,
                    weighting_type='equal',  
                    dimensions=300,
-                   model_types=['LR', 'RF'],
                    debug=True):
     '''
     Train multiple combinations of embeddings and models on an entire training dataset,
@@ -95,10 +135,10 @@ def train_and_save(texts: List[str], labels: List[int],
         texts: list of strings (posts), already stripped of punctuation/symbols
         labels: class labels
         embedding_types: which embeddings to use; can pass in less than the default
+        model_types: which models to use; can pass in less than default
         with_stopwords: whether to remove stopwords from input
         weighting_type: how to weight word vectors for word2vec and glove. Other option is 'tfidf'
         dimensions: for glove and doc2vec. Other options are 50, 100, 200 for glove, any for doc2vec
-        model_types: which models to use; can pass in less than default
         debug: if True, print current embedding and model that is training
 
     returns: none; saves each model to file
@@ -138,7 +178,7 @@ def train_and_save(texts: List[str], labels: List[int],
 
 
 
-def classify(texts: List[str], model_path: str):
+def classify(texts: List[str], model_path: str) -> Tuple[List[str], List[float]]:
     '''
     Classify unseen text
 
@@ -174,18 +214,16 @@ def classify(texts: List[str], model_path: str):
     predicted_classes = [0] * len(texts)
     predicted_probs = [0] * len(texts)
 
-    target_types = ['Disabled', 'Jews', 'LGBT+', 'Migrants', 'Muslims', 'POC', 'Women', 'Other/Mixed', 'None']
-
     for i, probs in enumerate(probabilities):
         max_prob = max(probs)
         max_class = np.where(probs == max_prob)[0][0]
-        predicted_classes[i] = target_types[max_class]
+        predicted_classes[i] = TARGET_TYPES[max_class]
         predicted_probs[i] = max_prob
 
     return predicted_classes, predicted_probs
 
 if __name__ == '__main__':
-    '''
+  
     combined_data_path = 'Data/combined_data.csv'
     
     with open(combined_data_path, 'r', encoding='utf8') as f:
@@ -199,11 +237,14 @@ if __name__ == '__main__':
 
         tweets.append(tweet)
         labels.append(label)
-    
-    # train on the above data and save multiple combinations of embeddings/models 
-    train_and_save(tweets, labels)
     '''
+    # train on the above data and save multiple combinations of embeddings/models 
+    #train_and_save(tweets, labels)
 
+    df, confusion = run_tests_kfold(tweets, labels, embedding_types=['tfidf'], model_types=['LR'])
+    print(df)
+    print(confusion)
+    '''
     
     texts = ["Happy birthday bird! @codyflitcraft",
         "Haha, Yankees fans are bent out of shape about the Hu27le graphic",
@@ -222,3 +263,4 @@ if __name__ == '__main__':
         for i, text in enumerate(texts):
             print(text)
             print(f'  Target = {classes[i]}, probability = {probs[i]}')
+    
