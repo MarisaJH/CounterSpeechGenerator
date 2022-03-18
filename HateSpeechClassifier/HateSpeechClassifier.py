@@ -1,7 +1,4 @@
-import json 
-import random
-import pickle
-import re
+import json, random, pickle, re, os
 
 import numpy as np
 import pandas as pd
@@ -24,10 +21,9 @@ from nltk.tokenize import word_tokenize
 from nltk.stem.porter import PorterStemmer
 from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.corpus import stopwords
-stop_words = stopwords.words('english')
 
 from Embedding import Embedding, utils_preprocess_text
-from Model import Model
+from Model import Model, MODELS_PATH
 
 
 '''
@@ -142,16 +138,54 @@ def train_and_save(texts: List[str], labels: List[int],
 
 
 
-def classify(texts: List[str]):
+def classify(texts: List[str], model_path: str):
+    '''
+    Classify unseen text
+
+    params:
+        texts: list of strings (social media posts)
+        model_path: string, path to saved model to use for classification
+
+    returns: parallel lists of predicted classes, predicted probabilites
+    '''
     # preprocess input
+    filename = model_path.split('/')[-1]
+    model_name, *embedding_params = filename.split('_')
+    embedding_filename = '_'.join(param for param in embedding_params)
+    embedding_type = embedding_params[0]
 
-    # transform input
+    if filename.endswith('nostop'):
+        stop_words = stopwords.words('english')
+    else:
+        stop_words = None
+    
+    texts = [utils_preprocess_text(text, lst_stopwords=stop_words) for text in texts]
 
-    # predict 
+    # transform input text into embedding
+    embedding = Embedding(embedding_type, load_filename=embedding_filename)
+    vectorized_texts = embedding.vectorize(texts, unseen=True)
 
-    pass
+    # predict
+    full_model_name = model_name + '_' + embedding_filename
+    model = Model(model_name, load_filename=full_model_name, max_iter=2000) 
+    probabilities = model.model.predict_proba(vectorized_texts)
+    
+    # return classes with highest probs for each text
+    predicted_classes = [0] * len(texts)
+    predicted_probs = [0] * len(texts)
+
+    target_types = ['Disabled', 'Jews', 'LGBT+', 'Migrants', 'Muslims', 'POC', 'Women', 'Other/Mixed', 'None']
+
+    for i, probs in enumerate(probabilities):
+        max_prob = max(probs)
+        max_class = np.where(probs == max_prob)[0][0]
+        predicted_classes[i] = target_types[max_class]
+        predicted_probs[i] = max_prob
+
+    return predicted_classes, predicted_probs
 
 if __name__ == '__main__':
+    '''
     combined_data_path = 'Data/combined_data.csv'
     
     with open(combined_data_path, 'r', encoding='utf8') as f:
@@ -166,5 +200,25 @@ if __name__ == '__main__':
         tweets.append(tweet)
         labels.append(label)
     
-    
+    # train on the above data and save multiple combinations of embeddings/models 
     train_and_save(tweets, labels)
+    '''
+
+    
+    texts = ["Happy birthday bird! @codyflitcraft",
+        "Haha, Yankees fans are bent out of shape about the Hu27le graphic",
+        "Maybe the UN could talk to those asian and african nations responsible for 90%+ of the pollution in the oceans' instead of insisting on this bullshit about climate change. ",
+        "Jews are a separate ethnicity, a danger to national security, and should be banned.",
+        "Gay men are a danger to children.",
+        "We are being invaded, We must fight until we will vanquish immigrants."]
+    
+    # classify the above texts using every model currently saved in the models directory
+    for model_filename in os.listdir(MODELS_PATH):
+        model_name = model_filename.split('/')[-1]
+        print('----------------------------------------')
+        print(model_name + ':\n')
+        classes, probs = classify(texts, model_name)
+    
+        for i, text in enumerate(texts):
+            print(text)
+            print(f'  Target = {classes[i]}, probability = {probs[i]}')

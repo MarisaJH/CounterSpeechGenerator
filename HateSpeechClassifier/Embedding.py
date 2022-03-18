@@ -19,22 +19,28 @@ EMBEDDINGS_SAVE_PATH = 'Models/Embeddings/'
 PRETRAINED_EMBEDDINGS_PATH = 'Data/'
 
 class Embedding:
-    def __init__(self, emb_type: str, **kwargs):
-        
+    def __init__(self, emb_type: str, load_filename='', **kwargs): 
         name_to_class = {'tfidf':    TFIDF(**kwargs), 
                          'doc2vec':  Doc2Vec(**kwargs), 
                          'word2vec': Word2Vec(**kwargs), 
+                         'd2v':      Doc2Vec(**kwargs), 
+                         'w2v':      Word2Vec(**kwargs),
                          'glove':    GloVe(**kwargs), 
                          'bert':     BERT(**kwargs)}
         
-        
         self.embedding = name_to_class[emb_type]
+        
+        # init from previously saved embedding
+        if load_filename != '':
+            self.embedding.__init_from_file__(load_filename)
 
-    def vectorize(self, texts: List[str]):
+    def vectorize(self, texts: List[str], unseen=False):
         '''
         Vectorize each text in texts; train models when appropriate (doc2vec).
+        
+        if unseen is true, infer vectors based on trained models when appropriate
         '''
-        return self.embedding.vectorize(texts)
+        return self.embedding.vectorize(texts, unseen=unseen)
     
     def save(self):
         '''
@@ -56,13 +62,32 @@ class TFIDF:
         self.with_stopwords = with_stopwords
         self.tfidf_vectorizer = None
         self.tfidf_matrix = None
+    
+    def __init_from_file__(self, filename: str):
+        '''
+        filename is for the tfidf matrix
+        '''
+        with_stop = filename.split('_')[-1]
+        self.with_stopwords = with_stop == 'withstop'
+
+        with open(EMBEDDINGS_SAVE_PATH + filename, 'rb') as f:
+            self.tfidf_matrix = pickle.load(f)
+        
+        with open(EMBEDDINGS_SAVE_PATH + 'tfidf_vectorizer_' + with_stop, 'rb') as f:
+            self.tfidf_vectorizer = pickle.load(f)
 
 
-    def vectorize(self, texts: List[str]) -> csr_matrix:
-        self.tfidf_vectorizer = TfidfVectorizer(ngram_range=(1, 2),
-                                   max_df = 0.75, min_df=5, 
-                                   max_features=10000)
-        self.tfidf_matrix = self.tfidf_vectorizer.fit_transform(texts)
+    def vectorize(self, texts: List[str], unseen=False) -> csr_matrix:
+        if self.tfidf_vectorizer is None:
+            self.tfidf_vectorizer = TfidfVectorizer(ngram_range=(1, 2),
+                                       max_df = 0.75, min_df=5, 
+                                       max_features=10000)
+        
+        if unseen:
+            self.tfidf_matrix = self.tfidf_vectorizer.transform(texts)
+
+        else:
+            self.tfidf_matrix = self.tfidf_vectorizer.fit_transform(texts)
 
         return self.tfidf_matrix
     
@@ -99,32 +124,57 @@ class Doc2Vec:
         self.epochs = epochs
         self.dimensions = dimensions
         self.model = None
-        self.embeddings = None
 
-    def vectorize(self, texts: List[str]) -> List[np.ndarray]:
+    def __init_from_file__(self, filename: str):
+        '''
+        filename is for d2v model
+        '''
 
-        # format as TaggedDocuments
-        sents = []
-        for id, text in enumerate(texts):
-            words = TaggedDocument([w for w in text.split(' ')], [id])
-            sents.append(words)
+        params = filename.split('_')
+        
+        with_stop = params[-1]
+        self.with_stopwords = with_stop == 'withstop'
 
-        # train model
-        self.model = D2V(documents=sents, min_count=1, window=10, vector_size=self.dimensions, sample=1e-4, negative=5, workers=8)
-        self.model.train(corpus_iterable=sents, total_examples=self.model.corpus_count, epochs=self.epochs)
+        self.epochs = int(params[1][:3])
+        self.dimensions = int(params[2][:3])
 
-        # get embeddings
-        self.embeddings = self.__get_embeddings_from_model__()
+        with open(EMBEDDINGS_SAVE_PATH + filename, 'rb') as f:
+            self.model = pickle.load(f)
+        
+        
+    def vectorize(self, texts: List[str], unseen=False) -> List[np.ndarray]:
+        # infer vectors of unseen data based on trained model
+        if unseen:
+            embeddings = [0]*len(texts)
+            for i, text in enumerate(texts):
+                words = [w for w in text.split(' ')]
+                embeddings[i] = self.model.infer_vector(words)
 
-        return self.embeddings
+        # get vectors out of a trained model
+        else:
+            # format as TaggedDocuments
+            sents = []
+            for id, text in enumerate(texts):
+                words = TaggedDocument([w for w in text.split(' ')], [id])
+                sents.append(words)
+
+            # train model
+            if self.model is None:
+                self.model = D2V(documents=sents, min_count=1, window=10, vector_size=self.dimensions, sample=1e-4, negative=5, workers=8)
+                self.model.train(corpus_iterable=sents, total_examples=self.model.corpus_count, epochs=self.epochs)
+
+            # get embeddings
+            embeddings = self.__get_embeddings_from_model__()
+        
+        return embeddings
     
-    def __get_embeddings_from_model__(self) -> List[np.ndarray]:
+    def __get_embeddings_from_model__(self,) -> List[np.ndarray]:
         if self.model is not None:
             return [self.model.dv[i] for i in range(len(self.model.dv))]
 
     def get_filename(self) -> str:
         with_stop = 'withstop' if self.with_stopwords else 'nostop'
-        return 'd2v_' + f'{self.epochs}epochs_{self.dimensions}dims_{with_stop}'
+        return 'd2v_' + f'{self.epochs}epochs_{self.dimensions}dim_{with_stop}'
 
     def save(self):
         '''
@@ -149,12 +199,28 @@ class Word2Vec:
         
         self.model = None
         self.avg_vector = None
-        self.embeddings = None
+        #self.embeddings = None
+
+    def __init_from_file__(self, filename: str):
+        params = filename.split('_')
+        
+        with_stop = params[-1]
+        self.with_stopwords = with_stop == 'withstop'
+        self.weighting = params[1][:-6]
+
+        self.model = KeyedVectors.load_word2vec_format(self.pretrained_path, binary=True)
+
+        with open(EMBEDDINGS_SAVE_PATH + 'w2v_avg_vector', 'rb') as f:
+            self.avg_vector = pickle.load(f)
+        
+        #with open(EMBEDDINGS_SAVE_PATH + filename, 'rb') as f:
+        #    self.embeddings = pickle.load(f)
     
-    def vectorize(self, texts: List[str]) -> List[np.ndarray]:
+    def vectorize(self, texts: List[str], **kwargs) -> List[np.ndarray]:
 
         # load pretrained embeddings
-        self.model = KeyedVectors.load_word2vec_format(self.pretrained_path, binary=True)
+        if self.model is None:
+            self.model = KeyedVectors.load_word2vec_format(self.pretrained_path, binary=True)
 
         # compute an average vector to be used for unknown words
         try:
@@ -192,7 +258,6 @@ class Word2Vec:
 
         # get document vectors weighted by tfidf values
         self.embeddings = tfidf_matrix @ term_w2v_embeddings
-
         return self.embeddings
 
     def __equal_vectorize__(self, texts: List[str]) -> List[np.ndarray]:
@@ -229,7 +294,6 @@ class Word2Vec:
         '''
         Save the sentence embeddings for the given texts
         '''
-
         if self.embeddings is not None:
             embeddings_path = EMBEDDINGS_SAVE_PATH + self.get_filename()
             with open(embeddings_path, 'wb+') as f:
@@ -251,8 +315,26 @@ class GloVe:
         self.avg_vector = None
         self.glove_word_embeddings = None
         self.word_to_index = None
+        #self.embeddings = None  # training data embeddings
 
-    def vectorize(self, texts: List[str]) -> List[np.ndarray]:
+    def __init_from_file__(self, filename: str):
+        params = filename.split('_')
+        
+        with_stop = params[-1]
+        self.with_stopwords = with_stop == 'withstop'
+        self.dimensions = int(params[1][:3])
+        self.weighting = params[2][:-6]
+
+        self.__read_embeddings_from_file__()
+        
+        #with open(EMBEDDINGS_SAVE_PATH + filename, 'rb') as f:
+        #    self.embeddings = pickle.load(f)
+
+
+    def __read_embeddings_from_file__(self):
+        '''
+        Read in the pretrained glove word embeddings 
+        '''
         # read in word embeddings from file
         self.glove_word_embeddings = []
         self.word_to_index = defaultdict(lambda: -1) # return index -1 on key error 
@@ -274,7 +356,11 @@ class GloVe:
 
         # place at end of glove_embeddings so that when we come across unknown words, 
         # they can be indexed with -1
-        self.glove_word_embeddings.append(self.avg_vector)
+        self.glove_word_embeddings.append(self.avg_vector)        
+
+    def vectorize(self, texts: List[str], **kwargs) -> List[np.ndarray]:
+        if self.glove_word_embeddings is None:
+            self.__read_embeddings_from_file__()
 
         # get sentence vecs based on the specified weighting scheme
         if self.weighting == 'tfidf':
@@ -302,8 +388,8 @@ class GloVe:
             term_glove_embeddings[i] = self.glove_word_embeddings[i]       
 
         # get document vectors weighting by tfidf values
-        self.embeddings = tfidf_matrix @ term_glove_embeddings
-        return self.embeddings
+        embeddings = tfidf_matrix @ term_glove_embeddings
+        return embeddings
 
     def __equal_vectorize__(self, texts: List[str]) -> List[np.ndarray]:
         
@@ -337,13 +423,24 @@ class BERT:
         self.with_stopwords = with_stopwords
         self.tokenizer = None
         self.model = None
+        self.embeddings = None    # training data embeddings
 
-    def vectorize(self, texts: List[str]) -> torch.Tensor:
+    def __init_from_file__(self, filename: str):
+        params = filename.split('_')
+        
+        with_stop = params[-1]
+        self.with_stopwords = with_stop == 'withstop'
+
+        self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        self.model = BertModel.from_pretrained("bert-base-uncased")
+
+    def vectorize(self, texts: List[str], **kwargs) -> torch.Tensor:
         '''
         Based on https://towardsdatascience.com/build-a-bert-sci-kit-transformer-59d60ddd54a5
         '''
-        self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-        self.model = BertModel.from_pretrained("bert-base-uncased")
+        if self.tokenizer is None:
+            self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+            self.model = BertModel.from_pretrained("bert-base-uncased")
 
         with torch.no_grad():
             self.embeddings = torch.stack([self.__get_sent_embedding__(text) for text in texts])
