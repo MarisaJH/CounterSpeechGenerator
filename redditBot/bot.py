@@ -78,40 +78,48 @@ def classify(texts: List[str],
 
 
 if __name__ == '__main__':
-    # reddit = praw.Reddit(
-    #     client_id="dhuuY2f2cUiCEg1kihpdgw",
-    #     client_secret="Xr6c4Lxz-wnaJXGjlTVdqkv3e4ttCg",
-    #     user_agent="<script:testBot:1.0>",
-    #     # username="CSGenerator",
-    #     # password="GoLynx!2022",
-    # )
-    # # print(reddit.user.me())
-    # #
-    # subreddit = reddit.subreddit("BotTestingforMyself")
-    #
-    # # replies=["hit me with your best shot", "what is it?",
-    # #          "how can I help :)", "you tryin ta get down or tryin ta run yah mouth"]
-    # texts=[]
-    # for submission in subreddit.hot(limit=5):
-    #     # print("**********")
-    #     # print(submission.title)
-    #     for comment in submission.comments:
-    #         if hasattr(comment, "body"):
-    #             comment_lower = comment.body.lower()
-    #             texts.append(comment_lower)
-    #             # if "cs" in comment_lower:
-    #             #     print("**********")
-    #             #     print(comment.body)
-    #             #     random_index = random.randint(0, len(replies)-1)
-    #             #     comment.reply(replies[random_index])
-    texts = ["Happy birthday bird! @codyflitcraft",
-             "Haha, Yankees fans are bent out of shape about the Hu27le graphic",
-             "Maybe the UN could talk to those asian and african nations responsible for 90%+ of the pollution in the oceans' instead of insisting on this bullshit about climate change. ",
-             "Jews are a separate ethnicity, a danger to national security, and should be banned.",
-             "Gay men are a danger to children.",
-             "We are being invaded, We must fight until we will vanquish immigrants."]
+    subreddits = ["DankMemes", "KotakuInAction", "MetaCanada", "MensRights", "MGTOW", "PussyPass", "PussyPassDenied", "The Donald", "TumblrInAction", "thesproanos", "AskThe_Donald", "Conservative", "conservatives", "unpopularopinion", "Imgoingtohellforthis"]
+
+    # storing hateful comments
+    # commentID = []
+    # body = []
+    # score = []
+    # submission = []
+    # subreddit = []
+
+    # texts = ["Happy birthday bird! @codyflitcraft",
+    #      "Haha, Yankees fans are bent out of shape about the Hu27le graphic",
+    #      "Maybe the UN could talk to those asian and african nations responsible for 90%+ of the pollution in the oceans' instead of insisting on this bullshit about climate change. ",
+    #      "Jews are a separate ethnicity, a danger to national security, and should be banned.",
+    #      "Gay men are a danger to children.",
+    #      "We are being invaded, We must fight until we will vanquish immigrants."]
+
+    texts = []
+    for x in subreddits:
+        subreddit = reddit.subreddit(x)
+        for submission in subreddit.hot(limit=1):
+            for comment in submission.comments:
+                if hasattr(comment, "body"):
+                    comment_lower = comment.body.lower()
+                    texts.append(comment_lower)
+                    # for x in judaismFlagTerms:
+                    #     if x in comment_lower:
+                            # commentID.append(comment.id)
+                            # body.append(comment_lower)
+                            # score.append(comment.score)
+                            # submission.append(comment.submission)
+                            # subreddit.append(subreddit.name)
+                            # print("*****" + comment.id + "*****")
+                            # print(comment.body)
+
+    # map comment instances to their corresponding scores, submissions, & subreddits
+    # commentMapping = dict( zip (commentID, body))
+    # scoreMapping = dict( zip (commentID, score))
+    # submissionMapping = dict( zip (commentID, submission))
+    # subredditMapping = dict( zip (commentID, subreddit))
+
     classes, probs = classify(texts)
 
     for i, text in enumerate(texts):
-        print(text)
-        print(f'  Target = {classes[i]}, probability = {probs[i]}')
+    print(text)
+    print(f'  Target = {classes[i]}, probability = {probs[i]}')
