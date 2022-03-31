@@ -2,7 +2,7 @@ import pickle
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 
-MODELS_PATH = 'Models/MultiClassifier/'
+MODELS_PATH = '../HateSpeechClassifier/Models/MultiClassifier/'
 
 class Model:
     def __init__(self, model_name: str, load_filename='', **kwargs):

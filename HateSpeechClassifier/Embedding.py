@@ -15,8 +15,8 @@ from gensim.models import KeyedVectors
 from transformers import BertTokenizer, BertModel
 import torch
 
-EMBEDDINGS_SAVE_PATH = 'Models/Embeddings/'
-PRETRAINED_EMBEDDINGS_PATH = 'Data/'
+EMBEDDINGS_SAVE_PATH = '../HateSpeechClassifier/Models/Embeddings/'
+PRETRAINED_EMBEDDINGS_PATH = '../HateSpeechClassifier/Data/'
 
 class Embedding:
     def __init__(self, emb_type: str, load_filename='', **kwargs): 

@@ -45,7 +45,7 @@ def utils_preprocess_text(text: str, flg_stemm=False, flg_lemm=False, lst_stopwo
     # back to string from list
     text = " ".join(lst_text)
     return text
-
+'''
 def classify(texts: List[str],
              vectorizer_path='tfidf_vectorizer',
              model_path='LR_model_tfidf'
@@ -75,7 +75,7 @@ def classify(texts: List[str],
         predicted_probs[i] = max_prob
 
     return predicted_classes, predicted_probs
-
+'''
 
 if __name__ == '__main__':
     subreddits = ["DankMemes", "KotakuInAction", "MetaCanada", "MensRights", "MGTOW", "PussyPass", "PussyPassDenied", "The Donald", "TumblrInAction", "thesproanos", "AskThe_Donald", "Conservative", "conservatives", "unpopularopinion", "Imgoingtohellforthis"]
@@ -121,5 +121,5 @@ if __name__ == '__main__':
     classes, probs = classify(texts)
 
     for i, text in enumerate(texts):
-    print(text)
-    print(f'  Target = {classes[i]}, probability = {probs[i]}')
+        print(text)
+        print(f'  Target = {classes[i]}, probability = {probs[i]}')
