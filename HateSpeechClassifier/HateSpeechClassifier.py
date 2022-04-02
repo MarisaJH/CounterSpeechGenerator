@@ -27,7 +27,7 @@ from Embedding import Embedding, utils_preprocess_text
 from Model import Model, MODELS_PATH
 
 SEED = 100
-TARGET_TYPES = ['Disabled', 'Jews', 'LGBT+', 'Migrants', 'Muslims', 'POC', 'Women', 'Other/Mixed', 'None']
+TARGET_TYPES = ['DISABLED', 'JEWS', 'LGBT+', 'MIGRANTS', 'MUSLIMS', 'POC', 'WOMEN', 'other', 'None']
 
 
 def run_tests_kfold(texts: List[str], labels: List[int],

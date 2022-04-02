@@ -13,7 +13,7 @@ HateSpeechClassifier/Reports
 Unofficial_Classification.ipynb
 .ipynb_checkpoints
 Tumblrbot/pytumblr-master
-CounterSpeechGenerator/gpt3key.txt
+CounterSpeechGenerator/openai_key.txt
 CounterSpeechGenerator/Data
 CounterSpeechGenerator/Results
 CounterSpeechGenerator/Models
