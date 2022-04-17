@@ -10,10 +10,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import classification_report
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import plot_roc_curve
+from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
 
 from typing import List, Dict, Tuple
 from collections import defaultdict
@@ -28,6 +25,63 @@ from Model import Model, MODELS_PATH
 
 SEED = 100
 TARGET_TYPES = ['DISABLED', 'JEWS', 'LGBT+', 'MIGRANTS', 'MUSLIMS', 'POC', 'WOMEN', 'other', 'None']
+TARGET_TO_INDEX = {'DISABLED': 0,
+                   'JEWS': 1,
+                   'LGBT+': 2,
+                   'MIGRANTS': 3,
+                   'MUSLIMS': 4,
+                   'POC': 5,
+                   'WOMEN': 6,
+                   'other': 7,
+                   'None': 8}
+
+def run_tests(texts: List[str], labels: List[int], model_names: List[str], debug=True) -> dict:
+    '''
+    Get metrics for multiple embedding/model combos. 
+    Assumes these models are already saved.
+    texts and labels are unseen.
+    No training is done.
+
+    params:
+        texts: list of strings (posts), already stripped of punctuation/symbols
+        labels: class labels
+        model_names: filenames of saved models to test; assumes these are in MODELS_PATH
+    
+    returns: dictionary of results:
+        {'model_name': {
+            'report': classification report,
+            'accuracy': test accuracy,
+            'confusion' : confusion matrix
+            }
+        }
+    '''
+    results = {}
+    for model_name in model_names:
+        if debug:
+            print('----------------------------------------')
+            print(model_name)
+
+        # classify given texts with current model
+        predicted_labels, predicted_probs = classify(texts, model_name)
+        predicted_labels = [TARGET_TO_INDEX[target] for target in predicted_labels]
+        
+        # get classification report, test accuracy, confusion matrix
+        report = classification_report(labels, predicted_labels)
+        accuracy = accuracy_score(labels, predicted_labels)
+        confusion = confusion_matrix(labels, predicted_labels)
+
+        if debug:
+            print(f'Accuracy: {accuracy * 100}')
+            print(report)
+            print(confusion)
+
+        results[model_name] = {
+            'report': report,
+            'accuracy': accuracy,
+            'confusion' : confusion
+        }
+    
+    return results
 
 
 def run_tests_kfold(texts: List[str], labels: List[int],
@@ -176,8 +230,6 @@ def train_and_save(texts: List[str], labels: List[int],
             model.save(embedding_filename)
 
 
-
-
 def classify(texts: List[str], model_path: str) -> Tuple[List[str], List[float]]:
     '''
     Classify unseen text
@@ -188,7 +240,6 @@ def classify(texts: List[str], model_path: str) -> Tuple[List[str], List[float]]
 
     returns: parallel lists of predicted classes, predicted probabilites
     '''
-    # preprocess input
     filename = model_path.split('/')[-1]
     model_name, *embedding_params = filename.split('_')
     embedding_filename = '_'.join(param for param in embedding_params)
@@ -199,6 +250,7 @@ def classify(texts: List[str], model_path: str) -> Tuple[List[str], List[float]]
     else:
         stop_words = None
     
+    # preprocess input
     texts = [utils_preprocess_text(text, lst_stopwords=stop_words) for text in texts]
 
     # transform input text into embedding
