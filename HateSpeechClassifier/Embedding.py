@@ -212,7 +212,7 @@ class Word2Vec:
         
         self.model = None
         self.avg_vector = None
-        #self.embeddings = None
+        self.embeddings = None
 
     def __init_from_file__(self, filename: str):
         params = filename.split('_')
@@ -339,7 +339,7 @@ class GloVe:
         self.avg_vector = None
         self.glove_word_embeddings = None
         self.word_to_index = None
-        #self.embeddings = None  # training data embeddings
+        self.embeddings = None  # training data embeddings
 
     def __init_from_file__(self, filename: str):
         params = filename.split('_')
@@ -486,6 +486,7 @@ class BERT:
         '''
         Get bert embedding for one sentence.
         '''
+        sent = sent[:512]
         tokenized = self.tokenizer.encode_plus(sent, add_special_tokens=True)['input_ids']
         attention = [1] * len(tokenized)
 

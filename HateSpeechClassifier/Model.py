@@ -1,6 +1,9 @@
 import pickle
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.tree import DecisionTreeClassifier 
+from sklearn.svm import SVC
+from xgboost import XGBClassifier
 
 MODELS_PATH = '../HateSpeechClassifier/Models/MultiClassifier/'
 
@@ -11,8 +14,11 @@ class Model:
         if load_filename != '':
             self.__init_from_file__(load_filename)
         else:
-            name_to_class = {'LR': LogisticRegression(**kwargs),
-                             'RF': RandomForestClassifier()}
+            name_to_class = {'LR': LogisticRegression(max_iter=2000),
+                             'RF': RandomForestClassifier(**kwargs),
+                             'DT': DecisionTreeClassifier(**kwargs),
+                             'SVM': SVC(probability=True, **kwargs),
+                             'XGB': XGBClassifier(**kwargs)}
 
             self.model = name_to_class[model_name]
     

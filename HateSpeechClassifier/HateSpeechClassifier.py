@@ -10,7 +10,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
+from sklearn.metrics import confusion_matrix, classification_report, accuracy_score, balanced_accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 
 from typing import List, Dict, Tuple
 from collections import defaultdict
@@ -66,8 +66,14 @@ def run_tests(texts: List[str], labels: List[int], model_names: List[str], debug
         predicted_labels = [TARGET_TO_INDEX[target] for target in predicted_labels]
         
         # get classification report, test accuracy, confusion matrix
-        report = classification_report(labels, predicted_labels)
+        report = classification_report(labels, predicted_labels, output_dict=True)
         accuracy = accuracy_score(labels, predicted_labels)
+        balanced_accuracy = balanced_accuracy_score(labels, predicted_labels)
+        precision = precision_score(labels, predicted_labels, average='weighted')
+        recall = recall_score(labels, predicted_labels, average='weighted') 
+        f1 = f1_score(labels, predicted_labels, average='weighted') 
+        #roc_auc = roc_auc_score(labels, predicted_labels, multi_class='ovr')
+        
         confusion = confusion_matrix(labels, predicted_labels)
 
         if debug:
@@ -78,6 +84,11 @@ def run_tests(texts: List[str], labels: List[int], model_names: List[str], debug
         results[model_name] = {
             'report': report,
             'accuracy': accuracy,
+            'balanced accuracy': balanced_accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1': f1,
+            #'roc_auc': roc_auc,
             'confusion' : confusion
         }
     
@@ -86,7 +97,7 @@ def run_tests(texts: List[str], labels: List[int], model_names: List[str], debug
 
 def run_tests_kfold(texts: List[str], labels: List[int],
                     embedding_types=['tfidf', 'word2vec', 'doc2vec', 'glove', 'bert'],
-                    model_types=['LR', 'RF'],
+                    model_types=['LR', 'RF', 'DT', 'SVM', 'XGB'],
                     with_stopwords=False,
                     weighting_type='equal',  
                     dimensions=300,
@@ -118,8 +129,6 @@ def run_tests_kfold(texts: List[str], labels: List[int],
         stop_words = stopwords.words('english')
         texts = [t for t in texts if not t in stop_words]
 
-    X_train_text, X_test_text, y_train, y_test = train_test_split(texts, labels, random_state=SEED, test_size=0.2)
-
     dfs = [] # save results for each scoring metric for each k in the kfold
     confusions = {} # save one confusion matrix for each embedding/model combo
     for embedding_type in embedding_types:
@@ -133,28 +142,28 @@ def run_tests_kfold(texts: List[str], labels: List[int],
                               dimensions=dimensions)
         
         # vectorize train and test set
-        X_train = embedding.vectorize(X_train_text, load_train=True)
+        X = embedding.vectorize(texts, load_train=True)
 
         # might need to save tfidf vectorizer and matrix for later use
         if embedding_type == 'tfidf' and weighting_type == 'tfidf':
             embedding.save(train_test_split=True)
 
-        X_test = embedding.vectorize(X_test_text, unseen=True, load_test=True)
-        
-        if embedding_type == 'tfidf' and weighting_type == 'tfidf':
-            embedding.save(train_test_split=True, save_test=True)
+       #X_test = embedding.vectorize(X_test_text, unseen=True, load_test=True)
+       #
+       #if embedding_type == 'tfidf' and weighting_type == 'tfidf':
+       #    embedding.save(train_test_split=True, save_test=True)
 
         for model_type in model_types:
             if debug:
                 print('  ' + model_type)
             
             # run kfold
-            model = Model(model_type, max_iter=2000)
+            model = Model(model_type, random_state=SEED)
             
             kfold = model_selection.KFold(n_splits=5, shuffle=True, random_state=SEED)
-            cv_results = model_selection.cross_validate(model.model, X_train, y_train, cv=kfold, scoring=scoring)
-            clf = model.model.fit(X_train, y_train)
-            y_pred = clf.predict(X_test)
+            cv_results = model_selection.cross_validate(model.model, X, labels, cv=kfold, scoring=scoring)
+            #clf = model.model.fit(X_train, y_train)
+            #y_pred = clf.predict(X_test)
 
             # add results to dataframe
             model_name = model_type + '_' + embedding.get_filename()
@@ -164,19 +173,20 @@ def run_tests_kfold(texts: List[str], labels: List[int],
             dfs.append(this_df)
             
             # save confusion
-            confusion = confusion_matrix(y_test, y_pred)
-            confusions[model_name] = confusion
+            #confusion = confusion_matrix(y_test, y_pred)
+            #confusions[model_name] = confusion
 
             if debug:
-                print(classification_report(y_test, y_pred, target_names=TARGET_TYPES))  
+                #print(classification_report(y_test, y_pred, target_names=TARGET_TYPES))  
+                print(this_df)
 
     final_df = pd.concat(dfs, ignore_index=True)
-    return final_df, confusions
+    return final_df #, confusions
 
 
 def train_and_save(texts: List[str], labels: List[int],
                    embedding_types=['tfidf', 'word2vec', 'doc2vec', 'glove', 'bert'],
-                   model_types=['LR', 'RF'],
+                   model_types=['LR', 'RF', 'DT', 'SVM', 'XGB'],
                    with_stopwords=False,
                    weighting_type='equal',  
                    dimensions=300,
@@ -202,6 +212,7 @@ def train_and_save(texts: List[str], labels: List[int],
     '''
     # remove stopwords if necessary
     if not with_stopwords:
+        stop_words = stopwords.words('english')
         texts = [t for t in texts if not t in stop_words]
     
     for embedding_type in embedding_types:
@@ -225,7 +236,7 @@ def train_and_save(texts: List[str], labels: List[int],
             if debug:
                 print('  ' + model_type)
 
-            model = Model(model_type, max_iter=2000)
+            model = Model(model_type, random_state=SEED)
             model.model.fit(X, labels)
             model.save(embedding_filename)
 
