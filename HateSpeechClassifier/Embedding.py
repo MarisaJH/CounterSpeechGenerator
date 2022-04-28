@@ -487,7 +487,9 @@ class BERT:
         Get bert embedding for one sentence.
         '''
         tokenized = self.tokenizer.encode_plus(sent, add_special_tokens=True)['input_ids']
-        tokenized = tokenized[:512]
+        if len(tokenized) > 512:
+            tokenized = tokenized[:512]
+            
         attention = [1] * len(tokenized)
 
         tokenized = torch.tensor(tokenized).unsqueeze(0)
